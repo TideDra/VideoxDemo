@@ -1,8 +1,8 @@
 import gradio as gr
 import os
 import datetime
-def makeVTT(captions, output_dir):
-    with open(os.path.join(output_dir,"subtitles.vtt"), "w") as f:
+def makeVTT(captions, output_dir,video_name):
+    with open(os.path.join(output_dir,f"{video_name}.vtt"), "w") as f:
         f.write("WEBVTT\n")
         for caption in captions:
             start_time = caption[0][0]
@@ -14,7 +14,7 @@ def makeVTT(captions, output_dir):
             f.write(f"{cap}\n\n")
 
 
-def launch_demo(chatbot):
+def launch_demo(chatbot,example_dir):
     '''
     chatbot(video) -> captions
     video: path to video
@@ -24,26 +24,31 @@ def launch_demo(chatbot):
     os.system("mkdir -p demo_tmp")
     def VideoUnderstanding(video_inp):
         captions=chatbot(video_inp)
-
+        os.system("rm demo_tmp/*.mkv")
+        os.system("rm demo_tmp/*.vtt")
         print(captions)
-        makeVTT(captions, "demo_tmp/")
-        video_html = f"<video width='800' height='600' controls><source src='file={video_inp}' type='video/mp4'><track kind='subtitles' src='file=demo_tmp/subtitles.vtt' srclang='en' label='English'  default></video>"
+        video_name = video_inp.split("/")[-1]
+        video_name = video_name.replace(".mp4",'')
+        makeVTT(captions, "demo_tmp/",video_name)
+        
+        os.system(f"ffmpeg -hide_banner -loglevel error -y -i {video_inp} -i demo_tmp/{video_name}.vtt -map 0:0 -map 0:1 -map 1 -c:a copy -c:v copy -c:s copy demo_tmp/{video_name}.mkv")
+        video_html = f" <style>::cue {{color: white;background-color: transparent;font-family: Arial, sans-serif;font-size: 28px;text-align: center;padding: 5px;border-radius: 5px;text-shadow: -1.5px -1.5px 0 black, 1.5px -1.5px 0 black, -1.5px 1.5px 0 black, 1.5px 1.5px 0 black;}}</style><video width='800' height='600' controls download='file=output_video.mkv'>><source src='file=demo_tmp/{video_name}.mkv' type='video/mp4'><track kind='subtitles' src='file=demo_tmp/{video_name}.vtt' srclang='en' label='English'  default></video>"
         return video_html
     logo_path = "/data/code/X-CLIP/logo_with_text.png"
     logo_url = "https://raw.githubusercontent.com/TideDra/X-CLIP/finegrained_caption/logo_with_text.png"
-
+    examples = os.listdir(example_dir)
+    examples_paths = [os.path.join(example_dir,example) for example in examples]
     with gr.Blocks(title="VideoX") as demo:
         gr.Markdown(f"<p align='center'><img src='{logo_url}' width='400'> <br></p>")
         with gr.Row():
             with gr.Column():
                 video_inp = gr.Video(label='Input Video')
                 btn = gr.Button(value="Submit")
-            video_out = gr.HTML(label='Output Video')
+            with gr.Column():
+                video_out = gr.HTML(label='Output Video')
+                #clearbtn = gr.ClearButton(value="Clear",components=[video_inp,video_out])
             btn.click(VideoUnderstanding,inputs=[video_inp],outputs=[video_out])
-        gr.Examples([["examples/nvzkbpt9z7k.mp4"]
-                    ,["examples/hx_zCVNh4aM.mp4"]
-                    ,["examples/QNc82qD2AtM.mp4"]
-                    ,["examples/efmCEJgfl2o.mp4"]],
+        gr.Examples(examples_paths,
                     [video_inp],
                     video_out,
                     VideoUnderstanding)
