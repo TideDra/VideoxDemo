@@ -1,6 +1,9 @@
 import gradio as gr
 import os
 import datetime
+import time
+from threading import Thread
+from loguru import logger
 def makeVTT(captions, output_dir,video_name):
     with open(os.path.join(output_dir,f"{video_name}.vtt"), "w") as f:
         f.write("WEBVTT\n")
@@ -13,7 +16,17 @@ def makeVTT(captions, output_dir,video_name):
             f.write(f"{start_time.strftime('%H:%M:%S')}.000 --> {end_time.strftime('%H:%M:%S')}.000\n")
             f.write(f"{cap}\n\n")
 
-
+def clear_tmp(tmp_dir='demo_tmp',cycle=3600):
+    start_time = time.time()
+    while True:
+        time.sleep(cycle/2)
+        files = os.listdir(tmp_dir)
+        for file in files:
+            file_path = os.path.join(tmp_dir,file)
+            stay_time = os.path.getctime(file_path)-start_time
+            if stay_time > cycle:
+                os.remove(file_path)
+        logger.info("Temp files cleared.")
 def launch_demo(chatbot,example_dir):
     '''
     chatbot(video) -> captions
@@ -22,13 +35,10 @@ def launch_demo(chatbot,example_dir):
         e.g. [[(0,3),'hello world'],[(3,6),'hello world'],[(6,9),'hello world']]
     '''
     os.system("mkdir -p demo_tmp")
+    os.system("rm -rf demo_tmp/*")
     def VideoUnderstanding(video_inp):
         captions=chatbot(video_inp)
-        os.system("rm demo_tmp/*.mkv")
-        os.system("rm demo_tmp/*.vtt")
-        print(captions)
-        video_name = video_inp.split("/")[-1]
-        video_name = video_name.replace(".mp4",'')
+        video_name = time.time()
         makeVTT(captions, "demo_tmp/",video_name)
         
         os.system(f"ffmpeg -hide_banner -loglevel error -y -i {video_inp} -i demo_tmp/{video_name}.vtt -map 0:0 -map 0:1 -map 1 -c:a copy -c:v copy -c:s copy demo_tmp/{video_name}.mkv")
@@ -52,5 +62,6 @@ def launch_demo(chatbot,example_dir):
                     [video_inp],
                     video_out,
                     VideoUnderstanding)
-
+    clear_tmp_thread = Thread(target=clear_tmp)
+    clear_tmp_thread.start()
     demo.launch(share=True)
